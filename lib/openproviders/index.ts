@@ -1,100 +1,108 @@
-import { anthropic } from "@ai-sdk/anthropic"
-import { google } from "@ai-sdk/google"
-import { mistral } from "@ai-sdk/mistral"
-import { openai, createOpenAI } from "@ai-sdk/openai"
 import type { LanguageModelV1 } from "@ai-sdk/provider"
-import { xai } from "@ai-sdk/xai"
-import { getProviderForModel } from "./provider-map"
-import type {
-  AnthropicModel,
-  GeminiModel,
-  MistralModel,
-  OllamaModel,
-  OpenAIModel,
-  SupportedModel,
-  XaiModel,
-} from "./types"
 
-type OpenAIChatSettings = Parameters<typeof openai>[1]
-type MistralProviderSettings = Parameters<typeof mistral>[1]
-type GoogleGenerativeAIProviderSettings = Parameters<typeof google>[1]
-type AnthropicProviderSettings = Parameters<typeof anthropic>[1]
-type XaiProviderSettings = Parameters<typeof xai>[1]
-type OllamaProviderSettings = OpenAIChatSettings // Ollama uses OpenAI-compatible API
-
-type ModelSettings<T extends SupportedModel> = T extends OpenAIModel
-  ? OpenAIChatSettings
-  : T extends MistralModel
-    ? MistralProviderSettings
-    : T extends GeminiModel
-      ? GoogleGenerativeAIProviderSettings
-      : T extends AnthropicModel
-        ? AnthropicProviderSettings
-        : T extends XaiModel
-          ? XaiProviderSettings
-          : T extends OllamaModel
-            ? OllamaProviderSettings
-            : never
-
-export type OpenProvidersOptions<T extends SupportedModel> = ModelSettings<T>
-
-// Get Ollama base URL from environment or use default
-const getOllamaBaseURL = () => {
-  if (typeof window !== 'undefined') {
-    // Client-side: use localhost
-    return "http://localhost:11434/v1"
-  }
-  
-  // Server-side: check environment variables
-  return process.env.OLLAMA_BASE_URL?.replace(/\/+$/, '') + "/v1" || "http://localhost:11434/v1"
+export type ModelConfig = {
+  id: string
+  name: string
+  modelIdentifier: string
+  apiEndpoint: string
+  supportsImages: boolean
+  supportsSystemInstruction: boolean
+  temperature: number
+  topP: number
+  apiKey?: string
 }
 
-// Create Ollama provider instance with configurable baseURL
-const createOllamaProvider = () => {
-  return createOpenAI({
-    baseURL: getOllamaBaseURL(),
-    apiKey: "ollama", // Ollama doesn't require a real API key
-    name: "ollama",
+// Klucz API do DashScope
+const API_KEY = "sk-cdd0b77aaed04d68b9f84408dd6e9348"
+
+// Pełna lista modeli DashScope
+export const AVAILABLE_MODELS: ModelConfig[] = [
+  {
+    id: 'dashscope-qwen-turbo',
+    name: 'Qwen Turbo',
+    modelIdentifier: 'qwen-turbo-latest',
+    apiEndpoint: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions',
+    supportsImages: false,
+    supportsSystemInstruction: true,
+    temperature: 0.0,
+    topP: 0.0,
+    apiKey: API_KEY
+  },
+  {
+    id: 'dashscope-qwen-plus-latest',
+    name: 'Qwen Plus',
+    modelIdentifier: 'qwen-plus-latest',
+    apiEndpoint: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions',
+    supportsImages: false, 
+    supportsSystemInstruction: true, 
+    temperature: 0.2, 
+    topP: 0.0, 
+    apiKey: API_KEY
+  },
+  {
+    id: 'dashscope-qwen3-30b-a3b',
+    name: 'Qwen3-30B-A3B',
+    modelIdentifier: 'qwen3-30b-a3b',
+    apiEndpoint: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions',
+    supportsImages: false,
+    supportsSystemInstruction: true,
+    temperature: 0.2,
+    topP: 0.0,
+    apiKey: API_KEY
+  },
+  {
+    id: 'dashscope-qwq-plus',
+    name: 'QWQ Plus',
+    modelIdentifier: 'qwq-plus',
+    apiEndpoint: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions',
+    supportsImages: false,
+    supportsSystemInstruction: true,
+    temperature: 0.2,
+    topP: 0.0,
+    apiKey: API_KEY
+  },
+  {
+    id: 'dashscope-qwen3-32b',
+    name: 'Qwen-3-32B',
+    modelIdentifier: 'qwen3-32b',
+    apiEndpoint: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions',
+    supportsImages: false,
+    supportsSystemInstruction: true,
+    temperature: 0.2,
+    topP: 0.0,
+    apiKey: API_KEY
+  }
+]
+
+// Funkcja wywołująca model DashScope
+export async function dashscope(
+  modelId: string,
+  messages: any[],
+  extraOptions?: Partial<Pick<ModelConfig, "temperature" | "topP">>
+): Promise<any> {
+  const model = AVAILABLE_MODELS.find((m) => m.id === modelId)
+  if (!model) throw new Error(`Model ${modelId} not found in AVAILABLE_MODELS`)
+  const { apiEndpoint, modelIdentifier, temperature, topP, apiKey } = model
+  const usedTemp = extraOptions?.temperature ?? temperature
+  const usedTopP = extraOptions?.topP ?? topP
+
+  const response = await fetch(apiEndpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: modelIdentifier,
+      messages,
+      temperature: usedTemp,
+      top_p: usedTopP,
+    }),
   })
-}
 
-export function openproviders<T extends SupportedModel>(
-  modelId: T,
-  settings?: OpenProvidersOptions<T>
-): LanguageModelV1 {
-  const provider = getProviderForModel(modelId)
-
-  if (provider === "openai") {
-    return openai(modelId as OpenAIModel, settings as OpenAIChatSettings)
+  if (!response.ok) {
+    throw new Error(`DashScope API error: ${response.statusText}`)
   }
 
-  if (provider === "mistral") {
-    return mistral(modelId as MistralModel, settings as MistralProviderSettings)
-  }
-
-  if (provider === "google") {
-    return google(
-      modelId as GeminiModel,
-      settings as GoogleGenerativeAIProviderSettings
-    )
-  }
-
-  if (provider === "anthropic") {
-    return anthropic(
-      modelId as AnthropicModel,
-      settings as AnthropicProviderSettings
-    )
-  }
-
-  if (provider === "xai") {
-    return xai(modelId as XaiModel, settings as XaiProviderSettings)
-  }
-
-  if (provider === "ollama") {
-    // Create a fresh Ollama provider instance for each call
-    const ollamaProvider = createOllamaProvider()
-    return ollamaProvider(modelId as OllamaModel, settings as OllamaProviderSettings)
-  }
-
-  throw new Error(`Unsupported model: ${modelId}`)
+  return await response.json()
 }
